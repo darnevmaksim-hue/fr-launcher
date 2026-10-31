@@ -1,0 +1,27 @@
+name: build-windows
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Build FR-Launcher
+        run: cargo build --release --manifest-path src-tauri/Cargo.toml
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fr-launcher-windows
+          path: src-tauri/target/release/fr_launcher.exe
+          if-no-files-found: error
