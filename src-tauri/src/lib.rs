@@ -61,6 +61,18 @@ pub fn run() {
             );
             apply_window_icon(app);
 
+            // Тестовый режим: FR_TEST_MODPACK=<slug> — импортировать модпак с Modrinth.
+            if let Ok(slug) = std::env::var("FR_TEST_MODPACK") {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let args = vec![serde_json::json!(slug), serde_json::Value::Null];
+                    match crate::api::api("modpack:install".into(), args, handle.clone()).await {
+                        Ok(v) => log::info!("fr-test: modpack ok: {v}"),
+                        Err(e) => log::error!("fr-test: modpack failed: {e}"),
+                    }
+                });
+            }
+
             // Тестовый режим: FR_TEST_LAUNCH=<instance_id> — установить и запустить инстанс.
             if let Ok(instance_id) = std::env::var("FR_TEST_LAUNCH") {
                 let handle = app.handle().clone();
