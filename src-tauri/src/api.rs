@@ -62,20 +62,34 @@ fn required_java(mc: &str) -> u8 {
     }
 }
 
+fn java_all() -> Vec<java::JavaInstallation> {
+    static CACHE: std::sync::OnceLock<Vec<java::JavaInstallation>> = std::sync::OnceLock::new();
+    CACHE.get_or_init(java::detect_all).clone()
+}
+
 fn java_major_of(path: &str) -> Option<u8> {
-    java::detect_all()
+    java_all()
         .into_iter()
         .find(|j| j.path.eq_ignore_ascii_case(path))
         .map(|j| j.version)
 }
 
 fn find_java(required: u8) -> Option<String> {
-    let mut list: Vec<_> = java::detect_all()
+    let mut list: Vec<_> = java_all()
         .into_iter()
         .filter(|j| j.version >= required)
         .collect();
-    // Предпочитаем 17/21, а не самые новые сборки.
-    list.sort_by_key(|j| if j.version <= 21 { j.version as i32 } else { 100 - j.version as i32 });
+    // Приоритет: ровно нужная версия, затем близкие, затем всё остальное.
+    list.sort_by_key(|j| {
+        let rank = if j.version == required {
+            3
+        } else if j.version <= required + 4 {
+            2
+        } else {
+            1
+        };
+        (rank, -(j.version as i32))
+    });
     list.pop().map(|j| j.path)
 }
 
@@ -382,7 +396,7 @@ pub async fn api(method: String, args: Vec<Value>, app: AppHandle) -> Result<Val
         // ===== Java =====
         "java:detect" => {
             let required = narg(&args, 0).max(1) as u8;
-            let mut list = java::detect_all();
+            let mut list = java_all();
             list.sort_by(|a, b| b.version.cmp(&a.version));
             let installations: Vec<Value> = list
                 .iter()
@@ -399,7 +413,7 @@ pub async fn api(method: String, args: Vec<Value>, app: AppHandle) -> Result<Val
             Ok(json!(installations))
         }
         "java:ensure" => {
-            let mut list = java::detect_all();
+            let mut list = java_all();
             list.sort_by(|a, b| b.version.cmp(&a.version));
             let best = list
                 .iter()
