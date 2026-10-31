@@ -10,7 +10,7 @@ use crate::services::{auth, installer, instance_meta, java, launcher, paths, sto
 use serde_json::{json, Value};
 use std::path::Path;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_dialog::DialogExt;
 
 fn arg(args: &[Value], i: usize) -> Value {
