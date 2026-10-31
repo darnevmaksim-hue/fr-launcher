@@ -166,6 +166,14 @@ pub async fn launch(profile: &Profile, app: AppHandle, username: Option<String>)
         "info",
     )?;
 
+    log::info!(
+        "fr-launch: cwd={} main={} natives={} assets={}",
+        game.display(),
+        resolved.main_class,
+        natives.display(),
+        paths::assets_dir().display()
+    );
+
     let mut child = cmd
         .spawn()
         .map_err(|e| err(format!("Failed to launch: {e}")))?;
@@ -196,6 +204,7 @@ pub async fn launch(profile: &Profile, app: AppHandle, username: Option<String>)
         let status = child.wait();
         GAME_SESSION.lock().unwrap().take();
         let code = status.as_ref().ok().and_then(|s| s.code()).unwrap_or(-1);
+        log::info!("fr-launch: процесс завершился, код {code}");
         let _ = app_exit.emit(
             "game-exit",
             serde_json::json!({
@@ -252,7 +261,11 @@ fn stream_game_output<R: std::io::Read + Send + 'static>(
             Err(_) => break,
         };
         let trimmed = line.trim();
-        if trimmed.is_empty() || should_skip_game_log(trimmed, is_stderr) {
+        if trimmed.is_empty() {
+            continue;
+        }
+        log::info!("game{}: {}", if is_stderr { "!" } else { "" }, trimmed);
+        if should_skip_game_log(trimmed, is_stderr) {
             continue;
         }
         let level = if is_stderr && trimmed.contains("ERROR") {
@@ -281,6 +294,7 @@ fn should_skip_game_log(line: &str, is_stderr: bool) -> bool {
 
 fn emit_game_log(app: &AppHandle, message: impl Into<String>, level: &str) -> Result<()> {
     let message = message.into();
+    log::info!("game[{}]: {}", level, message);
     let _ = app.emit(
         "game-log",
         GameLogEntry {
