@@ -88,7 +88,13 @@ fn find_java(required: u8) -> Option<String> {
         } else {
             1
         };
-        (rank, -(j.version as i32))
+        // При равной версии предпочитаем нашу JDK из ~/.fr-launcher/jdk.
+        let ours = if j.path.to_lowercase().contains("\\.fr-launcher\\jdk\\") {
+            1
+        } else {
+            0
+        };
+        (rank, ours, -(j.version as i32))
     });
     list.pop().map(|j| j.path)
 }
