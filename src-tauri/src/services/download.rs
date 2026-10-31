@@ -40,6 +40,7 @@ impl ProgressCtx {
 
     pub fn log(&self, message: impl Into<String>) {
         let message = message.into();
+        log::info!("install: {message}");
         let _ = self.app.emit(
             "install-log",
             InstallLogEntry {
