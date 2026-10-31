@@ -364,6 +364,324 @@ async fn download_file(url: &str, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+fn content_dir(instance_id: &str, kind: &str) -> std::path::PathBuf {
+    let base = paths::instance_dir(instance_id);
+    match kind {
+        "shader" | "shaders" => base.join("shaderpacks"),
+        "resourcepack" | "resourcepacks" | "resource" => base.join("resourcepacks"),
+        _ => base.join("mods"),
+    }
+}
+
+fn loader_filter(kind: &str, loader: &str) -> Option<&'static str> {
+    if kind == "mod" || kind.is_empty() {
+        match loader.to_lowercase().as_str() {
+            "fabric" => Some("fabric"),
+            "forge" => Some("forge"),
+            "neoforge" => Some("neoforge"),
+            "quilt" => Some("quilt"),
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
+async fn project_versions(slug: &str, mc: &str, kind: &str, loader: &str) -> Result<Vec<Value>> {
+    let mut url = format!(
+        "https://api.modrinth.com/v2/project/{}/version",
+        urlencode(slug)
+    );
+    let mut params: Vec<String> = Vec::new();
+    if !mc.is_empty() {
+        params.push(format!(
+            "game_versions={}",
+            urlencode(&json!([mc]).to_string())
+        ));
+    }
+    if let Some(l) = loader_filter(kind, loader) {
+        params.push(format!("loaders={}", urlencode(&json!([l]).to_string())));
+    }
+    if !params.is_empty() {
+        url.push('?');
+        url.push_str(&params.join("&"));
+    }
+    let data = get_json(&url).await?;
+    Ok(data.as_array().cloned().unwrap_or_default())
+}
+
+async fn pick_project_version(slug: &str, mc: &str, loader: &str, kind: &str) -> Result<Value> {
+    project_versions(slug, mc, kind, loader)
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| err(format!("Нет версии для Minecraft {mc}")))
+}
+
+async fn install_version_files(
+    instance_id: &str,
+    kind: &str,
+    version: &Value,
+    app: &AppHandle,
+) -> Result<Vec<String>> {
+    let dir = content_dir(instance_id, kind);
+    std::fs::create_dir_all(&dir)?;
+    let files = version
+        .get("files")
+        .and_then(|f| f.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let Some(file) = files
+        .iter()
+        .find(|f| f.get("primary").and_then(|p| p.as_bool()).unwrap_or(false))
+        .or_else(|| files.first())
+    else {
+        return Ok(Vec::new());
+    };
+    let filename = file
+        .get("filename")
+        .and_then(|v| v.as_str())
+        .unwrap_or("file.jar");
+    let Some(url) = file.get("url").and_then(|v| v.as_str()) else {
+        return Ok(Vec::new());
+    };
+    let safe = paths::safe_filename(filename)?;
+    let dest = dir.join(&safe);
+    if !dest.exists() {
+        emit_log(app, format!("[FR] Скачивание {safe}…\n"), "ok");
+        download_file(url, &dest).await?;
+    }
+    Ok(vec![safe])
+}
+
+async fn install_dependencies(
+    instance_id: &str,
+    kind: &str,
+    mc: &str,
+    loader: &str,
+    version: &Value,
+    app: &AppHandle,
+) -> Result<usize> {
+    let mut queue: Vec<Value> = version
+        .get("dependencies")
+        .and_then(|d| d.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut count = 0usize;
+    let mut guard = 0;
+    while let Some(dep) = queue.pop() {
+        guard += 1;
+        if guard > 50 {
+            break;
+        }
+        if dep.get("dependency_type").and_then(|v| v.as_str()) != Some("required") {
+            continue;
+        }
+        let project_id = dep.get("project_id").and_then(|v| v.as_str()).unwrap_or("");
+        if project_id.is_empty() || !seen.insert(project_id.to_string()) {
+            continue;
+        }
+        let version_id = dep.get("version_id").and_then(|v| v.as_str()).unwrap_or("");
+        let resolved = if !version_id.is_empty() {
+            get_json(&format!(
+                "https://api.modrinth.com/v2/version/{}",
+                urlencode(version_id)
+            ))
+            .await
+            .ok()
+        } else {
+            None
+        };
+        let resolved = match resolved {
+            Some(v) => v,
+            None => match pick_project_version(project_id, mc, loader, kind).await {
+                Ok(v) => v,
+                Err(e) => {
+                    log::warn!("зависимость {project_id}: {e}");
+                    continue;
+                }
+            },
+        };
+        count += install_version_files(instance_id, kind, &resolved, app)
+            .await?
+            .len();
+        if let Some(deps) = resolved.get("dependencies").and_then(|d| d.as_array()) {
+            queue.extend(deps.iter().cloned());
+        }
+    }
+    Ok(count)
+}
+async fn install_modpack(slug: &str, mc: &str, app: &AppHandle) -> Result<Value> {
+    let mut url = format!(
+        "https://api.modrinth.com/v2/project/{}/version",
+        urlencode(slug)
+    );
+    if !mc.is_empty() {
+        url.push_str(&format!(
+            "?game_versions={}",
+            urlencode(&json!([mc]).to_string())
+        ));
+    }
+    let versions = get_json(&url).await?;
+    let list = versions.as_array().cloned().unwrap_or_default();
+    let version = list.first().cloned().ok_or_else(|| err("Модпак не найден"))?;
+    let files = version
+        .get("files")
+        .and_then(|f| f.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let file = files
+        .iter()
+        .find(|f| f.get("primary").and_then(|p| p.as_bool()).unwrap_or(false))
+        .or_else(|| files.first())
+        .ok_or_else(|| err("Файл модпака не найден"))?;
+    let pack_url = file
+        .get("url")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| err("url модпака не найден"))?;
+    let filename = file
+        .get("filename")
+        .and_then(|v| v.as_str())
+        .unwrap_or("pack.mrpack");
+
+    let dir = paths::cache_dir().join("modpacks");
+    std::fs::create_dir_all(&dir)?;
+    let tmp = dir.join(paths::safe_filename(filename)?);
+    emit_log(app, "[FR] Загрузка модпака…\n", "ok");
+    download_file(pack_url, &tmp).await?;
+
+    let file_handle = std::fs::File::open(&tmp)?;
+    let mut zip = zip::ZipArchive::new(file_handle).map_err(|e| err(format!("zip: {e}")))?;
+    let index_raw = {
+        let mut zf = zip
+            .by_name("modrinth.index.json")
+            .map_err(|e| err(format!("index: {e}")))?;
+        let mut s = String::new();
+        std::io::Read::read_to_string(&mut zf, &mut s)?;
+        s
+    };
+    let index: Value = serde_json::from_str(&index_raw)?;
+    let name = index
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(slug)
+        .to_string();
+    let deps = index
+        .get("dependencies")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let mc_version = deps
+        .get("minecraft")
+        .and_then(|v| v.as_str())
+        .unwrap_or(mc)
+        .to_string();
+    let (loader, loader_version) = if let Some(v) = deps.get("fabric-loader").and_then(|v| v.as_str())
+    {
+        ("fabric".to_string(), v.to_string())
+    } else if let Some(v) = deps.get("quilt-loader").and_then(|v| v.as_str()) {
+        ("quilt".to_string(), v.to_string())
+    } else if let Some(v) = deps.get("neoforge").and_then(|v| v.as_str()) {
+        ("neoforge".to_string(), v.to_string())
+    } else if let Some(v) = deps.get("forge").and_then(|v| v.as_str()) {
+        ("forge".to_string(), v.to_string())
+    } else {
+        ("vanilla".to_string(), String::new())
+    };
+
+    let inst = store::create(&json!({
+        "name": name,
+        "mcVersion": mc_version,
+        "loader": loader,
+        "loaderVersion": loader_version,
+        "ram": 4096,
+    }))?;
+    let inst_dir = paths::instance_dir(&inst.id);
+    std::fs::create_dir_all(&inst_dir)?;
+
+    let names: Vec<String> = zip.file_names().map(|s| s.to_string()).collect();
+    for entry_name in names {
+        let rel = if let Some(r) = entry_name.strip_prefix("overrides/") {
+            r.to_string()
+        } else if let Some(r) = entry_name.strip_prefix("client-overrides/") {
+            r.to_string()
+        } else {
+            continue;
+        };
+        if rel.is_empty() || rel.ends_with('/') {
+            continue;
+        }
+        let dest = paths::join_contained(&inst_dir, &rel)?;
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut zf = zip
+            .by_name(&entry_name)
+            .map_err(|e| err(format!("zip: {e}")))?;
+        let mut out = std::fs::File::create(&dest)?;
+        std::io::copy(&mut zf, &mut out)?;
+    }
+    drop(zip);
+
+    let files = index
+        .get("files")
+        .and_then(|f| f.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let total = files.len();
+    let mut downloaded = 0usize;
+    for item in files {
+        let path = item.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        if path.is_empty() {
+            continue;
+        }
+        let dest = paths::join_contained(&inst_dir, path)?;
+        if dest.exists() {
+            downloaded += 1;
+            continue;
+        }
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut ok = false;
+        if let Some(urls) = item.get("downloads").and_then(|v| v.as_array()) {
+            for u in urls {
+                if let Some(u) = u.as_str() {
+                    match download_file(u, &dest).await {
+                        Ok(_) => {
+                            ok = true;
+                            break;
+                        }
+                        Err(e) => log::warn!("modpack file {path}: {e}"),
+                    }
+                }
+            }
+        }
+        if ok {
+            downloaded += 1;
+        }
+    }
+
+    log::info!(
+        "modpack: {} | MC {} | {} {} | файлов {}/{}",
+        name,
+        mc_version,
+        loader,
+        loader_version,
+        downloaded,
+        total
+    );
+
+    Ok(json!({
+        "ok": true,
+        "instanceId": inst.id,
+        "name": inst.name,
+        "mcVersion": mc_version,
+        "loader": store::canon_loader(&loader),
+        "downloaded": downloaded,
+        "total": total,
+    }))
+}
 fn instance_by_id(id: &str) -> Result<store::Instance> {
     store::get(id).ok_or_else(|| err("Instance not found"))
 }
@@ -552,13 +870,14 @@ pub async fn api(method: String, args: Vec<Value>, app: AppHandle) -> Result<Val
             }
         }
 
-        // Прямая установка файла по URL в папку mods инстанса.
+        // Прямая установка файла по URL (мод / шейдер / ресурспак).
         "mod:installDirect" => {
             let data = arg(&args, 0);
             let id = data
                 .get("instanceId")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| err("instanceId is required"))?;
+            let kind = data.get("type").and_then(|v| v.as_str()).unwrap_or("mod");
             let url = data
                 .get("url")
                 .or_else(|| data.get("downloadUrl"))
@@ -571,61 +890,68 @@ pub async fn api(method: String, args: Vec<Value>, app: AppHandle) -> Result<Val
                 .unwrap_or_else(|| {
                     url.split('/')
                         .last()
-                        .unwrap_or("mod.jar")
+                        .unwrap_or("file.jar")
                         .split('?')
                         .next()
-                        .unwrap_or("mod.jar")
+                        .unwrap_or("file.jar")
                         .to_string()
                 });
             let safe = paths::safe_filename(&filename)?;
-            let dest = paths::mods_dir(id).join(&safe);
+            let dir = content_dir(id, kind);
+            std::fs::create_dir_all(&dir)?;
+            let dest = dir.join(&safe);
             emit_log(&app, format!("[FR] Скачивание {safe}…\n"), "ok");
             download_file(url, &dest).await?;
             emit_log(&app, format!("[FR] Установлено: {safe}\n"), "ok");
             Ok(json!({ "ok": true, "file": safe, "path": dest.to_string_lossy() }))
         }
 
-        // Установка конкретной версии проекта Modrinth (файл + обязательные зависимости).
+        // Установка последней подходящей версии проекта Modrinth.
         "mod:install" => {
             let data = arg(&args, 0);
             let id = data
                 .get("instanceId")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| err("instanceId is required"))?;
-            let version_id = data
-                .get("versionId")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| err("versionId is required"))?;
-            let url = format!("https://api.modrinth.com/v2/version/{version_id}");
-            let version = get_json(&url).await?;
-            let mut installed = Vec::new();
-            if let Some(files) = version.get("files").and_then(|f| f.as_array()) {
-                if let Some(file) = files.iter().find(|f| {
-                    f.get("primary").and_then(|p| p.as_bool()).unwrap_or(false)
-                }).or_else(|| files.first()) {
-                    let filename = file
-                        .get("filename")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("mod.jar");
-                    let download = file
-                        .get("url")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| err("file url missing"))?;
-                    let safe = paths::safe_filename(filename)?;
-                    let dest = paths::mods_dir(id).join(&safe);
-                    emit_log(&app, format!("[FR] Скачивание {safe}…\n"), "ok");
-                    download_file(download, &dest).await?;
-                    installed.push(safe);
-                }
+            let kind = data.get("type").and_then(|v| v.as_str()).unwrap_or("mod");
+            let mc = data.get("mcVersion").and_then(|v| v.as_str()).unwrap_or("");
+            let loader = data.get("loader").and_then(|v| v.as_str()).unwrap_or("fabric");
+            let slug = data.get("slug").and_then(|v| v.as_str()).unwrap_or("");
+            if slug.is_empty() {
+                return Err(err("slug is required"));
             }
+            let version = pick_project_version(slug, mc, loader, kind).await?;
+            let installed = install_version_files(id, kind, &version, &app).await?;
             Ok(json!({ "ok": true, "installed": installed }))
         }
 
-        "mod:deps" => Ok(Value::Null),
-        "modpack:install" => Err(err(
-            "Установка модпаков в Rust-версии ещё не перенесена",
-        )),
+        // Установка обязательных зависимостей проекта.
+        "mod:deps" => {
+            let data = arg(&args, 0);
+            let id = data
+                .get("instanceId")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| err("instanceId is required"))?;
+            let kind = data.get("type").and_then(|v| v.as_str()).unwrap_or("mod");
+            let mc = data.get("mcVersion").and_then(|v| v.as_str()).unwrap_or("");
+            let loader = data.get("loader").and_then(|v| v.as_str()).unwrap_or("fabric");
+            let slug = data.get("slug").and_then(|v| v.as_str()).unwrap_or("");
+            if slug.is_empty() {
+                return Ok(json!({ "ok": true, "installed": 0 }));
+            }
+            let version = pick_project_version(slug, mc, loader, kind).await?;
+            let count = install_dependencies(id, kind, mc, loader, &version, &app).await?;
+            Ok(json!({ "ok": true, "installed": count }))
+        }
 
+        "modpack:install" => {
+            let slug = sarg(&args, 0);
+            let mc = arg(&args, 1).as_str().unwrap_or("").to_string();
+            if slug.is_empty() {
+                return Err(err("slug is required"));
+            }
+            install_modpack(&slug, &mc, &app).await
+        }
         // ===== Launch =====
         "game:launch" => launch_instance(&args, app.clone()).await,
 
