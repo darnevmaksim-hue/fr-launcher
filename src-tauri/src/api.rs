@@ -131,9 +131,10 @@ async fn launch_instance(args: &[Value], app: AppHandle) -> Result<Value> {
     // Java: если выбранная не подходит по версии — подбираем подходящую.
     let required = required_java(&inst.mc_version);
     let current = store::get(&id).map(|i| i.java_path).unwrap_or_default();
+    // Держим Java близко к требуемой: 25-я для 1.20.1 — лишний риск.
     let current_ok = !current.is_empty()
         && java_major_of(&current)
-            .map(|v| v >= required)
+            .map(|v| v >= required && v <= required + 4)
             .unwrap_or(false);
     if !current_ok {
         if let Some(p) = find_java(required) {
@@ -161,8 +162,14 @@ async fn launch_instance(args: &[Value], app: AppHandle) -> Result<Value> {
         installer::install_profile(&profile, app.clone())
             .await
             .map_err(|e| {
-                log::error!("install failed: {e}");
-                e
+                let msg = e.to_string();
+                log::error!("install failed: {msg}");
+                if msg.contains("neoforged") {
+                    err("NeoForge недоступен: maven.neoforged.net не отвечает. \
+                         Включите VPN/прокси и повторите установку.")
+                } else {
+                    e
+                }
             })?;
         let meta = instance_meta::load_instance_meta(&id)?;
         store::mark_installed(&id, &meta.version_id)?;
