@@ -150,7 +150,8 @@ pub async fn launch(profile: &Profile, app: AppHandle, username: Option<String>)
         };
         cmd.arg("--userType").arg(user_type);
     } else {
-        cmd.arg("--username")\n            .arg(username.unwrap_or_else(|| "Player".into()));
+        cmd.arg("--username")
+            .arg(username.unwrap_or_else(|| "Player".into()));
     }
 
     cmd.arg("--version").arg(&resolved.version_id);
