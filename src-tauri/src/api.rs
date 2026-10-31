@@ -603,7 +603,7 @@ pub async fn api(method: String, args: Vec<Value>, app: AppHandle) -> Result<Val
         // ===== Microsoft account =====
         "ms:status" => match auth::get_account() {
             Ok(Some(acc)) => Ok(json!({
-                "mode": if acc.auth_type == "microsoft" { "msa" } else { acc.auth_type },
+                "mode": if acc.auth_type == "microsoft" { "msa".to_string() } else { acc.auth_type.clone() },
                 "username": acc.username,
                 "uuid": acc.uuid,
                 "accessToken": acc.access_token,
