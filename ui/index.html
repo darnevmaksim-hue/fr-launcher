@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>FR-Launcher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="layout.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-nav="top" data-theme="void" data-density="cozy" data-radius="soft" data-glow="on">
+  <div class="bg-layer"></div>
+  <div class="bg-grid"></div>
+  <div class="bg-noise"></div>
+
+  <div class="layout">
+    <!-- ===== NAV SHELL (top / bottom / left / right via body[data-nav]) ===== -->
+    <header class="topbar">
+      <div class="bar-brand">
+        <div class="bar-logo">FR<span class="bar-dot">.</span></div>
+        <div class="bar-name">FR&#8209;LAUNCHER <span class="bar-tag">v<span id="app-ver">0.1.5</span></span></div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-page="home"><span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.6V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.6"/><path d="M9.5 21v-5.6h5V21"/></svg></span><span class="nav-lbl">Главная</span></button>
+        <button class="nav-item" data-page="mods"><span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg></span><span class="nav-lbl">Моды</span></button>
+        <button class="nav-item" data-page="link"><span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 4H20v6.5"/><path d="M20 4 11 13"/><path d="M17.5 14v5a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V8A1.5 1.5 0 0 1 5 6.5h5"/></svg></span><span class="nav-lbl">Линк</span></button>
+        <button class="nav-item" data-page="account"><span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.2" r="3.6"/><path d="M4.8 20.2c0-3.4 3.2-5.6 7.2-5.6s7.2 2.2 7.2 5.6"/></svg></span><span class="nav-lbl">Аккаунт</span></button>
+      </nav>
+
+      <div class="bar-right">
+        <div class="status-pill" id="conn-status"><span class="dot"></span><span id="conn-text">SYSTEM READY</span></div>
+        <button class="mini-acct" id="acct-avatar" title="Аккаунт">?</button>
+      </div>
+    </header>
+
+    <!-- ===== UPDATE POPUP ===== -->
+    <div class="overlay hidden" id="update-overlay">
+      <div class="update-modal">
+        <div class="update-head">
+          <div class="update-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19.5V5.5"/><path d="m6 11.5 6-6 6 6"/></svg></div>
+          <div class="update-title-wrap">
+            <div class="update-title">Доступна новая версия</div>
+            <div class="update-ver">FR-Launcher <b id="update-new-ver">0.0.0</b></div>
+          </div>
+          <button class="update-close" id="update-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5"/></svg></button>
+        </div>
+        <div class="update-changelog" id="update-changelog"></div>
+        <div class="update-status" id="update-status"></div>
+        <div class="update-actions">
+          <button class="btn-primary" id="update-btn">Обновить</button>
+          <button class="btn-ghost" id="update-later">Обновить позже</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== CONTENT ===== -->
+    <main class="content">
+
+      <!-- ===== HOME + PLAY (объединено) ===== -->
+      <section class="page active" id="page-home">
+        <div class="home-grid">
+          <div class="home-left">
+            <div class="eyebrow">FR LAUNCHER · FIRE CONTROL</div>
+            <h1 class="hero-title">ГОТОВ К <span class="grad">ЗАПУСКУ</span></h1>
+            <p class="hero-sub">Выбери модпак, проверь доступность и жми «Играть». Моды, друзья и другие лаунчеры — в одном месте.</p>
+
+            <div class="play-controls card">
+              <div class="play-controls-grid">
+                <div class="field">
+                  <label>Игровое имя (offline)</label>
+                  <input type="text" id="sel-username" placeholder="Player" />
+                </div>
+                <div class="field">
+                  <label>Модпак</label>
+                  <select id="sel-instance"></select>
+                  <div class="field-hint" id="play-pack-hint"></div>
+                </div>
+              </div>
+              <button class="btn-play" id="btn-play"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M7 4.6v14.8L19.5 12z"/></svg>ИГРАТЬ</button>
+
+              <div class="play-instance" id="play-instance"></div>
+
+              <div class="prog" id="prog" hidden>
+                <div class="prog-head"><span id="prog-label">Подготовка...</span><span id="prog-pct">0%</span></div>
+                <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
+                <div class="prog-detail" id="prog-detail"></div>
+              </div>
+              <div class="folder-actions">
+                <button class="btn-ghost" id="btn-open-gamedir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2.6h7.4a2 2 0 0 1 2 2v8.4a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>Открыть папку игры</button>
+                <button class="btn-ghost" id="btn-open-mcdir">Открыть .minecraft</button>
+              </div>
+              <pre class="log" id="game-log">// Журнал запуска появится здесь</pre>
+            </div>
+          </div>
+
+          <div class="home-right">
+            <div class="home-panel">
+              <div class="panel-head">Быстрый старт</div>
+              <div class="quick-grid" id="quick-grid"></div>
+            </div>
+
+            <!-- Банер рекламы сайта -->
+            <a class="promo-banner" id="promo-banner" href="#">
+              <div class="promo-tag">САЙТ МОДА · BALLISTICYS</div>
+              <div class="promo-title">Открой мир <span class="grad">Ballisticys</span></div>
+              <div class="promo-desc">Сборки, гайды и загрузки наших модов — на официальном сайте.</div>
+              <div class="promo-go">Перейти на сайт <span class="promo-arrow">→</span></div>
+            </a>
+
+            <div class="home-panel">
+              <div class="panel-head">Ресурсы</div>
+              <div id="metrics-home"></div>
+            </div>
+
+            <div class="home-panel">
+              <div class="panel-head">Телеметрия системы</div>
+              <div class="telemetry-stack" id="telemetry-home"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== MODS ===== -->
+      <section class="page" id="page-mods">
+        <div class="page-head">
+          <h2>Модуль модов</h2>
+          <p class="page-sub">Каталог Modrinth — установка прямиком в модпак</p>
+        </div>
+
+        <div class="mods-packbar">
+          <span class="mpb-label">Активный модпак</span>
+          <select id="mod-pack-select"></select>
+          <span class="mpb-meta" id="mod-pack-meta"></span>
+          <button class="btn-ghost" id="btn-modpack-here">+ Новый модпак</button>
+        </div>
+
+        <div class="mods-tabs" id="mods-tabs">
+          <button class="mtab" data-tab="instances">Модпаки</button>
+          <button class="mtab active" data-tab="browse">Каталог</button>
+          <button class="mtab" data-tab="installed">Установленные <span id="instmod-count" class="badge">0</span></button>
+          <span style="flex:1"></span>
+          <button class="btn-ghost" id="btn-new-modpack">+ Создать модпак</button>
+        </div>
+
+        <div class="mods-pane" id="pane-instances">
+          <div class="toolbar">
+            <button class="btn-ghost" id="btn-new-instance">+ Создать модпак</button>
+            <span class="mpb-meta">Изолированные сборки с собственными модами и настройками</span>
+          </div>
+          <div class="instance-grid" id="instance-grid"></div>
+        </div>
+
+        <div class="mods-pane active" id="pane-browse">
+          <div class="cat-bar" id="mod-cat-bar"></div>
+          <div class="browse-bar">
+            <select id="mod-type" class="type-select" title="Что ищем">
+              <option value="mod">Моды</option>
+              <option value="shader">Шейдеры</option>
+              <option value="resourcepack">Ресурс-паки</option>
+              <option value="modpack">Модпаки (готовые сборки)</option>
+            </select>
+            <div class="search-wrap">
+              <span class="search-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.4"/><path d="m15.8 15.8 4.2 4.2"/></svg></span>
+              <input type="text" id="mod-search" placeholder="Поиск на Modrinth..." />
+              <button class="search-clear" id="mod-search-clear" title="Очистить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5"/></svg></button>
+            </div>
+          </div>
+          <div class="mod-grid" id="mod-grid"></div>
+          <div class="pagination" id="mod-pagination"></div>
+        </div>
+
+        <div class="mods-pane" id="pane-installed">
+          <p class="page-sub" style="margin-bottom:1rem">Моды в папке выбранного инстанса. Клик по модy — вкл/выкл.</p>
+          <div class="repair-bar">
+            <button class="btn-ghost" id="btn-deps-tree">Дерево зависимостей</button>
+            <button class="btn-ghost" id="btn-repair-scan">Проверить и исправить</button>
+            <span class="repair-hint-inline" id="repair-state"></span>
+          </div>
+          <div class="deps-tree" id="deps-tree" hidden></div>
+          <div class="repair-out" id="repair-out" hidden></div>
+          <div class="installed-list" id="installed-list"></div>
+        </div>
+      </section>
+
+      <!-- ===== LINK (Хаб лаунчеров) ===== -->
+      <section class="page" id="page-link">
+        <div class="page-head">
+          <h2>Линк</h2>
+          <p class="page-sub">Масштабный хаб: добавляй другие лаунчеры (мини-игры, политика и т.д.) и запускай их из FR-Launcher</p>
+        </div>
+
+        <div class="link-toolbar">
+          <button class="btn-ghost" id="btn-link-add">+ Добавить лаунчер (.exe)</button>
+          <span class="link-hint">Перетаскивай карточки пальцем/мышью — сортировка сохранится.</span>
+        </div>
+
+        <div class="link-grid" id="link-grid">
+          <div class="friend-empty">Лаунчеров нет. Нажми «Добавить лаунчер» и выбери .exe.</div>
+        </div>
+      </section>
+
+      <!-- ===== ACCOUNT ===== -->
+      <section class="page" id="page-account">
+        <div class="page-head">
+          <h2>Аккаунт и настройки</h2>
+          <p class="page-sub">Профиль, вход и параметры лаунчера</p>
+        </div>
+
+        <div class="acct-layout">
+          <div class="card acct-hero">
+            <div class="acct-big-avatar" id="acct-big-avatar">?</div>
+            <div class="acct-big-name" id="acct-big-name">Не залогинен</div>
+            <div class="acct-big-mode" id="acct-big-mode">offline</div>
+          </div>
+
+          <div class="card acct-body">
+            <h3 class="card-title">Вход в аккаунт</h3>
+
+            <div class="acct-tabs">
+              <button class="acct-tab active" data-atab="offline">Offline-ник</button>
+              <button class="acct-tab" data-atab="microsoft">Microsoft</button>
+            </div>
+
+            <div class="acct-pane active" data-apane="offline">
+              <div class="field">
+                <label>Игровое имя</label>
+                <input type="text" id="acct-offline-name" placeholder="Steve" />
+              </div>
+              <p class="acct-hint">Вход по нику без интернета. Максимально простой способ играть.</p>
+              <button class="btn-primary" id="btn-acct-offline">Войти по нику</button>
+            </div>
+
+            <div class="acct-pane" data-apane="microsoft">
+              <div class="ms-box">
+                <div class="ms-ribbon" aria-hidden="true"><span>НА РАЗРАБОТКЕ</span></div>
+                <svg viewBox="0 0 23 23" width="34" height="34" aria-hidden="true"><path fill="#f25022" d="M1 1h10v10H1z"/><path fill="#7fba00" d="M12 1h10v10H12z"/><path fill="#00a4ef" d="M1 12h10v10H1z"/><path fill="#ffb900" d="M12 12h10v10H12z"/></svg>
+                <div class="ms-title">Вход через Microsoft</div>
+                <p class="acct-hint">Твой настоящий ник, скин, плащи и доступ на все лицензионные серверы — как в официальном лаунчере.</p>
+                <div id="ms-flow" style="display:none">
+                  <div class="ms-code-box">
+                    <div class="ms-code-label">Открой сайт и введи код:</div>
+                    <div class="ms-user-code" id="ms-usercode">------</div>
+                    <button class="btn-ghost" id="btn-ms-open" disabled>Открыть страницу входа</button>
+                  </div>
+                  <div class="lan-note" id="ms-flow-status">Ждём подтверждения...</div>
+                  <button class="btn-ghost" id="btn-ms-cancel" disabled>Отмена</button>
+                </div>
+                <div class="lan-note hidden" id="ms-err"></div>
+                <div id="ms-idle">
+                  <button class="btn-primary" id="btn-acct-ms" disabled>Войти через Microsoft</button>
+                </div>
+                <div id="ms-logged" style="display:none">
+                  <div class="ms-logged-row">
+                    <img id="ms-skin-big" class="ms-skin" alt="" width="64" height="98" />
+                    <div>
+                      <div class="ms-title">Подключено: <span id="ms-logged-name"></span></div>
+                      <div class="acct-hint" id="ms-logged-uuid"></div>
+                      <button class="btn-ghost" id="btn-acct-ms-logout">Выйти</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-row">
+          <div class="settings-card card">
+            <h3 class="card-title">Java</h3>
+            <div class="field">
+              <label>Путь к Java (авто-поиск если пусто)</label>
+              <div class="path-row">
+                <input type="text" id="set-java" placeholder="C:\\Program Files\\Java\\..." />
+                <button class="btn-ghost" id="btn-java-browse">...</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Выделение памяти (МБ)</label>
+              <input type="number" id="set-ram" value="4096" min="1024" step="512" />
+            </div>
+          </div>
+          <div class="settings-card card">
+            <h3 class="card-title">Каталог игры</h3>
+            <div class="field">
+              <label>Папка .minecraft</label>
+              <div class="path-row">
+                <input type="text" id="set-mc-dir" />
+                <button class="btn-ghost" id="btn-mcdir-browse">...</button>
+              </div>
+            </div>
+          </div>
+          <div class="settings-card card">
+            <h3 class="card-title">Оформление</h3>
+            <div class="cust-group">
+              <label class="cust-label">Базовый стиль</label>
+              <div class="style-presets" id="style-presets"></div>
+            </div>
+            <div class="field">
+              <label>Свой фон (подсветка подтянется из фона автоматически)</label>
+              <div class="bg-preview" id="bg-preview"><span class="bg-preview-empty">Нет фона</span></div>
+              <div class="path-row">
+                <input type="text" id="set-bg-path" placeholder="Выбери картинку (.png/.jpg/.webp)" readonly />
+                <button class="btn-ghost" id="btn-bg-browse">Выбрать</button>
+                <button class="btn-ghost" id="btn-bg-clear">Сбросить</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Акцент (если авто-подхват не нравится)</label>
+              <div class="path-row">
+                <input type="color" id="set-accent" value="#4f8cff" />
+                <button class="btn-ghost" id="btn-accent-reset">Авто из фона</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== CUSTOMIZATION ===== -->
+          <div class="settings-card card cust-card">
+            <h3 class="card-title">Интерфейс и расположение</h3>
+
+            <div class="cust-group">
+              <label class="cust-label">Панель навигации</label>
+              <div class="seg" id="cust-nav">
+                <button class="seg-btn" data-value="top"><span class="seg-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg></span><span>Сверху</span></button>
+                <button class="seg-btn" data-value="bottom"><span class="seg-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><span>Снизу</span></button>
+                <button class="seg-btn" data-value="left"><span class="seg-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg></span><span>Слева</span></button>
+                <button class="seg-btn" data-value="right"><span class="seg-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span><span>Справа</span></button>
+              </div>
+            </div>
+
+            <div class="cust-group">
+              <label class="cust-label">Тема</label>
+              <div class="theme-grid" id="cust-theme">
+                <button class="theme-chip" data-theme="void" style="--tc:#f0a428;--tc2:#ff7a3c">Void</button>
+                <button class="theme-chip" data-theme="ember" style="--tc:#ff5a2c;--tc2:#ff9a4a">Ember</button>
+                <button class="theme-chip" data-theme="toxic" style="--tc:#8fd94a;--tc2:#c8f06a">Toxic</button>
+                <button class="theme-chip" data-theme="crimson" style="--tc:#f0585f;--tc2:#ff8a6a">Crimson</button>
+                <button class="theme-chip" data-theme="ice" style="--tc:#4fd1e0;--tc2:#6ea8ff">Ice</button>
+                <button class="theme-chip" data-theme="mono" style="--tc:#c9ced6;--tc2:#8a919b">Mono</button>
+              </div>
+            </div>
+
+            <div class="cust-group">
+              <label class="cust-label">Плотность</label>
+              <div class="seg" id="cust-density">
+                <button class="seg-btn" data-value="compact"><span>Компактно</span></button>
+                <button class="seg-btn" data-value="cozy"><span>Обычно</span></button>
+                <button class="seg-btn" data-value="roomy"><span>Просторно</span></button>
+              </div>
+            </div>
+
+            <div class="cust-group">
+              <label class="cust-label">Углы</label>
+              <div class="seg" id="cust-radius">
+                <button class="seg-btn" data-value="sharp"><span>Острые</span></button>
+                <button class="seg-btn" data-value="soft"><span>Мягкие</span></button>
+                <button class="seg-btn" data-value="round"><span>Круглые</span></button>
+              </div>
+            </div>
+
+            <div class="cust-group cust-row">
+              <label class="cust-label">Свечение интерфейса</label>
+              <button class="toggle" id="cust-glow" role="switch" aria-checked="true"><span class="knob"></span></button>
+            </div>
+
+            <button class="btn-ghost" id="btn-cust-reset">Сбросить оформление</button>
+          </div>
+
+          <button class="btn-primary" id="btn-save-settings">Сохранить настройки</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="gprog" id="gprog" hidden>
+    <div class="gprog-head"><span id="gprog-label">Загрузка...</span><span id="gprog-pct">0%</span></div>
+    <div class="gprog-track"><div class="gprog-fill" id="gprog-fill"></div></div>
+    <div class="gprog-detail" id="gprog-detail"></div>
+  </div>
+
+  <script src="tauri-shim.js"></script>
+  <script src="renderer.js"></script>
+  <script src="metrics-ui.js"></script>
+  <script src="repair-ui.js"></script>
+</body>
+</html>
