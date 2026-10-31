@@ -41,7 +41,42 @@ async fn get_json(url: &str) -> Result<Value> {
 }
 
 fn emit_log(app: &AppHandle, text: impl Into<String>, cls: &str) {
-    let _ = app.emit("game:log", json!({ "text": text.into(), "cls": cls }));
+    let text = text.into();
+    log::info!("{}", text.trim_end());
+    let _ = app.emit("game:log", json!({ "text": text, "cls": cls }));
+}
+
+/// Минимальная версия Java для версии Minecraft.
+fn required_java(mc: &str) -> u8 {
+    let mut parts = mc.split('.');
+    let major: u32 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
+    let minor: u32 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
+    if major >= 26 {
+        25
+    } else if major == 1 && minor >= 21 {
+        21
+    } else if major == 1 && minor >= 17 {
+        17
+    } else {
+        8
+    }
+}
+
+fn java_major_of(path: &str) -> Option<u8> {
+    java::detect_all()
+        .into_iter()
+        .find(|j| j.path.eq_ignore_ascii_case(path))
+        .map(|j| j.version)
+}
+
+fn find_java(required: u8) -> Option<String> {
+    let mut list: Vec<_> = java::detect_all()
+        .into_iter()
+        .filter(|j| j.version >= required)
+        .collect();
+    // Предпочитаем 17/21, а не самые новые сборки.
+    list.sort_by_key(|j| if j.version <= 21 { j.version as i32 } else { 100 - j.version as i32 });
+    list.pop().map(|j| j.path)
 }
 
 /// Запуск установки + игры. Возвращает pid java-процесса.
@@ -71,11 +106,50 @@ async fn launch_instance(args: &[Value], app: AppHandle) -> Result<Value> {
         });
     }
 
-    let profile = store::to_profile(&store::get(&id).unwrap_or(inst.clone()));
+    log::info!(
+        "launch: {} | MC {} | {} | java {}",
+        inst.name,
+        inst.mc_version,
+        inst.loader,
+        inst.java_path
+    );
+
+    // Java: если выбранная не подходит по версии — подбираем подходящую.
+    let required = required_java(&inst.mc_version);
+    let current = store::get(&id).map(|i| i.java_path).unwrap_or_default();
+    let current_ok = !current.is_empty()
+        && java_major_of(&current)
+            .map(|v| v >= required)
+            .unwrap_or(false);
+    if !current_ok {
+        if let Some(p) = find_java(required) {
+            log::info!("launch: выбираю Java {p} (нужна {required}+)");
+            let _ = store::update(&id, |i| i.java_path = p.clone());
+        } else {
+            log::warn!("launch: Java {required}+ не найдена");
+        }
+    }
+
+    // Подхватываем уже установленную версию (например, из Electron-версии).
+    let loader_key = store::loader_key(&inst.loader);
+    let mut profile = store::to_profile(&store::get(&id).unwrap_or(inst.clone()));
+    if !profile.installed {
+        if let Some(v) = store::detect_installed_version(&inst.mc_version, &loader_key) {
+            log::info!("launch: найдена готовая версия {v}, установка не нужна");
+            instance_meta::save_instance_meta(&id, &loader_key, &v)?;
+            store::mark_installed(&id, &v)?;
+            profile = store::to_profile(&store::get(&id).ok_or_else(|| err("Instance lost"))?);
+        }
+    }
 
     if !profile.installed {
         emit_log(&app, "[FR] Установка инстанса…\n", "ok");
-        installer::install_profile(&profile, app.clone()).await?;
+        installer::install_profile(&profile, app.clone())
+            .await
+            .map_err(|e| {
+                log::error!("install failed: {e}");
+                e
+            })?;
         let meta = instance_meta::load_instance_meta(&id)?;
         store::mark_installed(&id, &meta.version_id)?;
     }
