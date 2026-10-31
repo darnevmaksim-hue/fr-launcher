@@ -62,8 +62,8 @@ fn required_java(mc: &str) -> u8 {
     }
 }
 
-fn java_all() -> Vec<java::JavaInstallation> {
-    static CACHE: std::sync::OnceLock<Vec<java::JavaInstallation>> = std::sync::OnceLock::new();
+fn java_all() -> Vec<crate::models::JavaInstallation> {
+    static CACHE: std::sync::OnceLock<Vec<crate::models::JavaInstallation>> = std::sync::OnceLock::new();
     CACHE.get_or_init(java::detect_all).clone()
 }
 
