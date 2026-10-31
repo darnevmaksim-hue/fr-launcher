@@ -1,0 +1,17 @@
+FR-Launcher
+===========
+
+Copyright (C) 2026 FR-Launcher contributors.
+
+Этот проект распространяется под лицензией GNU General Public License
+версии 3 или (по вашему выбору) любой более поздней версии. Полный текст —
+в файле LICENSE.
+
+Проект использует код HorizonUI-Launcher
+(https://github.com/nokarin-dev/HorizonUI-Launcher),
+Copyright (C) nokarin, лицензия GPL-3.0-or-later:
+  - Rust-сервисы в src-tauri/src/services (загрузка Minecraft, установка
+    загрузчиков, запуск игры, работа с Modrinth, авторизация);
+  - модель данных запуска (Profile) и часть вспомогательных утилит.
+
+Интерфейс (ui/) и контракт window.API — из FR-Launcher (Electron).
