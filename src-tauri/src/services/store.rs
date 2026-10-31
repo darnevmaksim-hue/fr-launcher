@@ -320,3 +320,39 @@ pub fn find_by_dir(dir: &Path) -> Option<Instance> {
         .into_iter()
         .find(|i| paths::instance_dir(&i.id) == dir)
 }
+
+/// Ищет уже установленную версию клиента в общем каталоге .minecraft/versions.
+/// Нужно, чтобы подхватывать установки, сделанные Electron-версией лаунчера,
+/// и не качать клиент заново.
+pub fn detect_installed_version(mc: &str, loader_key_value: &str) -> Option<String> {
+    let dir = paths::versions_dir();
+    let entries = std::fs::read_dir(&dir).ok()?;
+    let mut found: Vec<String> = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !entry.path().join(format!("{name}.json")).exists() {
+            continue;
+        }
+        let low = name.to_lowercase();
+        let mc_low = mc.to_lowercase();
+        let matches = match loader_key_value {
+            "vanilla" => low == mc_low,
+            "fabric" => low.starts_with("fabric-loader-") && low.ends_with(&format!("-{mc_low}")),
+            "quilt" => low.starts_with("quilt-loader-") && low.ends_with(&format!("-{mc_low}")),
+            "forge" => low.starts_with(&format!("{mc_low}-forge-")),
+            "neoforge" => {
+                (low.starts_with(&format!("{mc_low}-neoforge-"))
+                    || (low.ends_with(&format!("-{mc_low}"))
+                        && !low.starts_with("fabric-loader-")
+                        && !low.starts_with("quilt-loader-")))
+                    && low.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+            }
+            _ => false,
+        };
+        if matches {
+            found.push(name);
+        }
+    }
+    found.sort();
+    found.pop()
+}
